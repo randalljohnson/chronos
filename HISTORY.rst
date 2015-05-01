@@ -1,6 +1,11 @@
 Changelog
 =========
 
+v0.3
+------
+
+* Add support for window resizing and scrolling (GH-4_)
+
 v0.2
 ------
 
@@ -23,3 +28,4 @@ v0.1
 
 .. _GH-1: https://github.com/NSinopoli/chronos/issues/1
 .. _GH-2: https://github.com/NSinopoli/chronos/issues/2
+.. _GH-4: https://github.com/NSinopoli/chronos/pull/4

@@ -68,7 +68,7 @@ Or if you wanted to add/subtract 45 minutes and 30 seconds, type::
 Version Information
 -------------------
 
-Current stable release is v0.2, last updated on 26 February 2012.
+Current stable release is v0.3, last updated on 1 May 2015.
 
 Feedback
 --------
