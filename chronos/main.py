@@ -24,13 +24,13 @@ def set_interval(interval):
 
 class Trigger:
 
-    def __init__(self, config={}):
+    def __init__(self, config=None):
         self.elapsed = 0
         self.running = False
         self.display_enabled = True
         self.highlight = False
 
-        if config != {}:
+        if config:
             self.build(config)
 
     def add_time(self, amount):
@@ -38,7 +38,9 @@ class Trigger:
 
     def build(self, config):
         self.window = curses.newwin(config['height'], config['width'], 0, 0)
-        self.move(config['pos_y'], config['pos_x'])
+        self.display_enabled = config['display_enabled']
+        if self.display_enabled:
+            self.move(config['pos_y'], config['pos_x'])
         self.title, self.colors = config['title'], config['colors']
 
     def clear(self):
@@ -90,6 +92,8 @@ class Trigger:
             self.window.refresh()
 
     def render(self):
+        if not self.display_enabled:
+            return
         time = self.format_seconds(self.get_elapsed())
         if self.running:
             time += '           '
@@ -98,12 +102,25 @@ class Trigger:
 
         self.window.erase()
 
+        width = self.window.getmaxyx()[1] - 1
+        if len(time) + 3 > width:
+            if self.highlight:
+                self.window.addstr(0, 0, '.' * width, self.colors['htime'])
+            else:
+                self.window.addstr(0, 0, '.' * width, self.colors['time'])
+            self.refresh()
+            return
+
+        width -= len(time)
+        title = self.title
+        if len(title) > width:
+            title = title[:width - 3] + '...'
         if self.highlight:
             self.window.addstr(0, 0, time, self.colors['htime'])
-            self.window.addstr(0, len(time), self.title, self.colors['htitle'])
+            self.window.addstr(0, len(time), title, self.colors['htitle'])
         else:
             self.window.addstr(0, 0, time, self.colors['time'])
-            self.window.addstr(0, len(time), self.title, self.colors['title'])
+            self.window.addstr(0, len(time), title, self.colors['title'])
 
         self.refresh()
 
@@ -245,9 +262,28 @@ def print_help(screen):
     screen.touchwin()
     screen.refresh()
 
+def print_status_bar(screen, colors):
+    height, width = screen.getmaxyx()
+
+    status = "chronos v0.2 - Type 'h' for help, or 'q' to quit."
+    status_bar = '{s:<{l}}'.format(s=status[:width], l=width)
+    screen.addstr(height - 2, 0, status_bar, colors['status'])
+
 def repaint(window):
     window.clear()
     window.refresh()
+
+def resize(screen, command_window, colors):
+    height, width = screen.getmaxyx()
+
+    screen.clear()
+
+    print_status_bar(screen, colors)
+
+    command_window.mvwin(height - 1, 0)
+    command_window.resize(1, width)
+
+    screen.refresh()
 
 def main():
     # xterm-color can't handle curs_set(0)
@@ -263,14 +299,13 @@ def main():
 
     height, width = screen.getmaxyx()
 
+    top_trigger = 0
     triggers = []
     stoppers = []
 
-    status = "chronos v0.2 - Type 'h' for help, or 'q' to quit."
-    status_bar = '{s:<{l}}'.format(s=status, l=width)
-    screen.addstr(height - 2, 0, status_bar, colors['status'])
-
     command_window = curses.newwin(1, width, height - 1, 0)
+
+    resize(screen, command_window, colors)
 
     keep_alive = True
 
@@ -280,24 +315,31 @@ def main():
         char = screen.getch()
 
         if char == curses.KEY_DOWN or char == ord('j'):
-            if position < len(triggers) - 1:
+            if position == height - 3:
+                if top_trigger + position < len(triggers) - 1:
+                    top_trigger += 1
+            elif top_trigger + position < len(triggers) - 1:
                 position += 1
         elif char == curses.KEY_UP or char == ord('k'):
-            if position > 0:
+            if position == 0:
+                if top_trigger + position:
+                    top_trigger -= 1
+            elif position > 0:
                 position -= 1
 
         # New
-        elif char == ord('n') and len(triggers) < height - 2:
+        elif char == ord('n'):
             prompt = '[NEW] Enter the title: '
             title = capture_command(command_window, prompt)
 
             config = {
                 'colors': colors,
                 'height': 1,
-                'width': width - 2,
+                'width': width,
                 'title': title,
                 'pos_x': 0,
-                'pos_y': len(triggers)
+                'pos_y': len(triggers),
+                'display_enabled': 0 <= len(triggers) - top_trigger < height - 3,
             }
 
             trigger = Trigger(config)
@@ -312,22 +354,19 @@ def main():
             prompt = '[DELETE] Are you sure? [y/N]: '
             command = capture_command(command_window, prompt)
             if command.lower() == 'y':
-                stoppers[position].set()
-                triggers[position].clear()
+                index = position + top_trigger
+                stoppers[index].set()
+                triggers[index].clear()
 
-                current = position + 1
-                while current < len(triggers):
-                    y, x = triggers[current].get_coordinates()
-                    triggers[current].move(y - 1, x)
-                    current += 1
-
-                del triggers[position]
-                del stoppers[position]
-                if position == len(triggers) and position:
+                if index == len(triggers) - 1 and position:
+                    triggers[index].disable_display()
                     position -= 1
 
+                del triggers[index]
+                del stoppers[index]
+
                 repaint(screen)
-                screen.addstr(height - 2, 0, status_bar, colors['status'])
+                print_status_bar(screen, colors)
 
         # Edit
         elif char == ord('e') and len(triggers):
@@ -373,9 +412,22 @@ def main():
             command = capture_command(command_window, prompt)
             keep_alive = ( command.lower() != 'y' )
 
+        # Resize event
+        elif char == curses.KEY_RESIZE:
+            height, width = screen.getmaxyx()
+            for trigger in triggers:
+                trigger.window.resize(1, width)
+            if position >= height - 2:
+                position = height - 3
+            resize(screen, command_window, colors)
 
         for index, trigger in enumerate(triggers):
-            if index == position:
+            if not (0 <= index - top_trigger < height - 2):
+                triggers[index].disable_display()
+                continue
+            triggers[index].move(index - top_trigger, 0)
+            triggers[index].enable_display()
+            if index - top_trigger == position:
                 triggers[index].set_highlight(True)
             else:
                 triggers[index].set_highlight(False)
