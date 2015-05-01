@@ -265,7 +265,7 @@ def print_help(screen):
 def print_status_bar(screen, colors):
     height, width = screen.getmaxyx()
 
-    status = "chronos v0.2 - Type 'h' for help, or 'q' to quit."
+    status = "chronos v0.3 - Type 'h' for help, or 'q' to quit."
     status_bar = '{s:<{l}}'.format(s=status[:width], l=width)
     screen.addstr(height - 2, 0, status_bar, colors['status'])
 
