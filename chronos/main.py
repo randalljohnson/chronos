@@ -31,6 +31,7 @@ class Trigger:
         self.time_pause_total = 0
         self.time_pause_start = 0
         self.time_pause = 0
+        self.paste_total = 0
         self.elapsed = 0
         self.running = False
         self.display_enabled = True
@@ -75,6 +76,9 @@ class Trigger:
 
     def get_elapsed(self):
         return self.elapsed
+
+    def paste_time(self, clipboard):
+        self.paste_total += clipboard
 
     def move(self, y, x):
         self.window.mvwin(y, x)
@@ -134,6 +138,7 @@ class Trigger:
         self.refresh()
 
     def reset(self):
+        self.paste_total = 0
         self.time_pause_start = self.get_time()
         self.time_start = self.get_time()
         self.time_delta = 0
@@ -162,7 +167,7 @@ class Trigger:
 
     def tick(self):
         if self.running:
-            self.elapsed = (self.get_time() - self.time_start) + self.time_delta - self.time_pause_total
+            self.elapsed = (self.get_time() - self.time_start) + self.time_delta - self.time_pause_total + self.paste_total
         else:
             self.time_pause_total = (self.get_time() - self.time_pause_start) + self.time_pause
 
@@ -320,6 +325,7 @@ def main():
     top_trigger = 0
     triggers = []
     stoppers = []
+    clipboard = 0
 
     command_window = curses.newwin(1, width, height - 1, 0)
 
@@ -397,6 +403,17 @@ def main():
             prompt = '[ADD] Enter the amount of time: '
             time = capture_command(command_window, prompt)
             triggers[position].add_time(time)
+
+        # Cut
+        elif char == ord('x') and len(triggers):
+            clipboard = triggers[position].get_elapsed()
+            triggers[position].stop()
+            triggers[position].reset()
+
+        # Paste
+        elif char == ord('v') and len(triggers):
+            triggers[position].paste_time(clipboard)
+            triggers[position].start()
 
         # Subtract
         elif char == ord('s') and len(triggers):
