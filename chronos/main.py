@@ -5,6 +5,7 @@ import math
 import os
 import re
 import threading
+import time
 
 def set_interval(interval):
     def outer_wrap(function):
@@ -25,6 +26,11 @@ def set_interval(interval):
 class Trigger:
 
     def __init__(self, config=None):
+        self.time_start = self.get_time()
+        self.time_delta = 0
+        self.time_pause_total = 0
+        self.time_pause_start = 0
+        self.time_pause = 0
         self.elapsed = 0
         self.running = False
         self.display_enabled = True
@@ -33,8 +39,11 @@ class Trigger:
         if config:
             self.build(config)
 
+    def get_time(self):
+        return int(round(time.time()))
+
     def add_time(self, amount):
-        self.elapsed += self.parse_time(amount)
+        self.time_delta += self.parse_time(amount)
 
     def build(self, config):
         self.window = curses.newwin(config['height'], config['width'], 0, 0)
@@ -125,6 +134,11 @@ class Trigger:
         self.refresh()
 
     def reset(self):
+        self.time_pause_start = self.get_time()
+        self.time_start = self.get_time()
+        self.time_delta = 0
+        self.time_pause_total = 0
+        self.time_pause = 0
         self.elapsed = 0
 
     def set_highlight(self, highlight):
@@ -134,19 +148,23 @@ class Trigger:
         self.title = title
 
     def start(self):
+        self.time_pause = self.time_pause_total
         self.running = True
 
     def stop(self):
+        self.time_pause_start = self.get_time()
         self.running = False
 
     def subtract_time(self, amount):
-        self.elapsed -= self.parse_time(amount)
+        self.time_delta -= self.parse_time(amount)
         if self.elapsed < 0:
             self.elapsed = 0
 
     def tick(self):
         if self.running:
-            self.add_time('1s')
+            self.elapsed = (self.get_time() - self.time_start) + self.time_delta - self.time_pause_total
+        else:
+            self.time_pause_total = (self.get_time() - self.time_pause_start) + self.time_pause
 
     def toggle(self):
         if self.running:
@@ -155,7 +173,7 @@ class Trigger:
             self.start()
 
 
-@set_interval(1)
+@set_interval(0.1)
 def update_trigger(trigger):
     trigger.tick()
     trigger.render()
